@@ -15,6 +15,8 @@
 constexpr char MOHPC_LOG_NAMESPACE[] = "common";
 
 std::filesystem::path gameDir;
+std::string cl_namepass;
+int serverPort;
 
 class Logger : public MOHPC::Log::ILog
 {
@@ -73,11 +75,17 @@ void InitCommands(int argc, const char* argv[])
 	TCLAP::CmdLine cmd("Commands", ' ', MOHPC::VERSION_STRING);
 
 	TCLAP::ValueArg<std::filesystem::path> pathArg("p", "path", "Game path", false, std::filesystem::path(), "string");
+	TCLAP::ValueArg<std::string> namePassArg("s", "namepass", "protected name password", false, std::string(), "string");
+	TCLAP::ValueArg<int> serverPortArg("t", "serverport", "remote server port", false, 12203, "integer");
 	cmd.add(pathArg);
+	cmd.add(namePassArg);
+	cmd.add(serverPortArg);
 
 	cmd.parse(argc, argv);
 
 	gameDir = pathArg.getValue();
+	cl_namepass = namePassArg.getValue();
+	serverPort = serverPortArg.getValue();
 }
 
 void InitCommon(int argc, const char* argv[])
@@ -94,6 +102,16 @@ void InitCommon(int argc, const char* argv[])
 const std::filesystem::path& GetGamePathFromCommandLine()
 {
 	return gameDir;
+}
+
+const std::string& GetNamePassFromCommandLine()
+{
+	return cl_namepass;
+}
+
+const int GetServerPortFromCommandLine()
+{
+	return serverPort;
 }
 
 MOHPC::AssetManagerPtr AssetLoad(const MOHPC::fs::path& path)

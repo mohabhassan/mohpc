@@ -836,7 +836,7 @@ const char* TokenParser::GetString(bool crossline, bool escape, bool allowMultiL
 	token = "";
 	if(escape)
 	{
-		while (*script_p != '"')
+		while (*script_p != '"' && script_p < end_p-1)
 		{
 			if (*script_p == TOKENEOL)
 			{
@@ -872,8 +872,9 @@ const char* TokenParser::GetString(bool crossline, bool escape, bool allowMultiL
 	}
 	else
 	{
-		while (*script_p != '"')
+		while (*script_p != '"' && script_p < (end_p-1))
 		{
+
 			token.append(1, *script_p++);
 
 			CheckOverflow();

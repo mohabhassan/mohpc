@@ -257,8 +257,10 @@ IRequestPtr EngineServer::ConnectRequest::handleResponse(const char* name, Token
 {
 	if (!strHelpers::icmp(name, "droperror"))
 	{
-		const char* error = parser.GetLine(true);
-		data.response(0, 0, protocolType_c(), data.info, error);
+		str error;
+		while (parser.TokenAvailable(true))
+			error += parser.GetLine(true) + str("\\n");
+		data.response(0, 0, protocolType_c(), data.info, error.c_str());
 		return nullptr;
 	}
 	else if(strHelpers::icmp(name, "connectResponse"))

@@ -31,7 +31,7 @@ PrintCommandHandler::HandlerList& PrintCommandHandler::getHandlerList()
 
 void PrintCommandHandler::handlePrint(TokenParser& args)
 {
-	const char* text = args.GetString(true, false);
+	const char* text = args.GetString(true, false, true);
 	if (*text < (uint8_t)hudMessage_e::Max)
 	{
 		const hudMessage_e type = (hudMessage_e) * (text++);
@@ -46,6 +46,6 @@ void PrintCommandHandler::handlePrint(TokenParser& args)
 
 void PrintCommandHandler::handleHudPrint(TokenParser& args)
 {
-	const char* text = args.GetString(true, false);
+	const char* text = args.GetString(true, false, true);
 	getHandlerList().hudPrintHandler.broadcast(text);
 }

@@ -23,6 +23,7 @@
 #include <MOHPC/Utility/Collision/Collision.h>
 #include <MOHPC/Common/Log.h>
 #include <MOHPC/Version.h>
+#include <MOHPC/Network/Client/UserInfoSkinHelper.h>
 #include "Common/Common.h"
 #include "Common/platform.h"
 
@@ -37,6 +38,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <random>
+#include <regex>
 
 #define MOHPC_LOG_NAMESPACE "test_net"
 
@@ -80,7 +82,8 @@ int main(int argc, const char* argv[])
 		// print each supported protocol
 		MOHPC_LOG(Info, "- protocol %d game version %s", proto->getServerProtocol(), proto->getVersion());
 	}
-
+	str cl_namepass = GetNamePassFromCommandLine();
+	int serverPort = GetServerPortFromCommandLine();
 	const MOHPC::AssetManagerPtr AM = AssetLoad(GetGamePathFromCommandLine());
 
 	std::memset(buf, 0, sizeof(buf));
@@ -101,11 +104,11 @@ int main(int argc, const char* argv[])
 	NetAddr4Ptr adr = NetAddr4::create();
 	NetAddr4Ptr adrGs = NetAddr4::create();
 	adr->setIp(127, 0, 0, 1);
-	adr->setPort(12203);
+	adr->setPort(serverPort);
 	adrGs->setIp(127, 0, 0, 1);
 
 	// server's gamespy port
-	adrGs->setPort(12300);
+	adrGs->setPort(serverPort+97);
 
 	const IRemoteIdentifierPtr remoteIdentifier = IPRemoteIdentifier::create(adr);
 	const IRemoteIdentifierPtr remoteIdentifierGs = IPRemoteIdentifier::create(adrGs);
@@ -134,10 +137,18 @@ int main(int argc, const char* argv[])
 	const EngineServerPtr clientBase = Network::EngineServer::create(dispatcher, udpComm, remoteIdentifier);
 	const GSServerPtr gsServer = Network::GSServer::create(dispatcher, udpComm, remoteIdentifierGs);
 
-	clientBase->getInfo([](const ReadOnlyInfo* info)
+	str name_suffix = "";
+	clientBase->getInfo([&name_suffix](const ReadOnlyInfo* info)
 		{
 			str jsonString = InfoJson::toJson<JsonStyleBeautifier>(*info);
 			MOHPC_LOG(Info, "ServerInfo: %s", jsonString.c_str());
+			{
+				std::smatch sm;
+				if (std::regex_search(jsonString, sm, std::regex("\"clients\": \"(\\S+?)\"")))
+				{
+					name_suffix = sm[1].str();
+				}
+			}
 		});
 
 	gsServer->query([](const ReadOnlyInfo& info)
@@ -169,6 +180,7 @@ int main(int argc, const char* argv[])
 		bool use;
 		bool leanleft;
 		bool leanright;
+		bool dontreset;
 	} buttons;
 	memset(&buttons, 0, sizeof(buttons));
 
@@ -180,10 +192,12 @@ int main(int argc, const char* argv[])
 	Network::UserGameInputModulePtr inputModule;
 	ModuleBase* cgame = nullptr;
 	Network::CGame::PredictionPtr prediction;
-	userInfo->setName("mohpc_test");
+	userInfo->setName(("mohpc_test" + name_suffix).c_str());
 	userInfo->setRate(25000);
+	if(!cl_namepass.empty())
+		userInfo->setUserKeyValue("cl_namepass", cl_namepass.c_str());
 	const Network::ConnectSettingsPtr connectSettings = Network::ConnectSettings::create();
-	connectSettings->setQport(rand() % 45536 + 20000);
+	connectSettings->setQport(gen() % 45536 + 20000);
 	connectSettings->setCDKey("12345");
 	usercmd_t oldcmd;
 	uint8_t lastVMChanged = 0;
@@ -303,9 +317,14 @@ int main(int argc, const char* argv[])
 					MOHPC_LOG(Info, "server restarted");
 				});
 
+			connection->getSnapshotManager().getHandlers().firstSnapshotHandler.add([](const rawSnapshot_t& snap)
+			{
+				MOHPC_LOG(Info, "client entered world");
+			});
+
 			connection->getGameState().handlers().configStringHandler.add([](csNum_t csNum, const char* configString)
 				{
-					MOHPC_LOG(Info, "cs %d modified: %s", csNum, configString);
+					//MOHPC_LOG(Info, "cs %d modified: %s", csNum, configString);
 				});
 
 			fnHandle_t cb = cgame->getSnapshotProcessor().handlers().entityAddedHandler.add([&connection](const entityState_t& state)
@@ -368,10 +387,47 @@ int main(int argc, const char* argv[])
 					//MOHPC_LOG(Trace, "voice %d: sound \"%s\"", num++, soundName);
 				});
 
+			cgame->getGameplayNotify().getHUDNotify().setAlignmentHandler.add([](uint8_t index, horizontalAlign_e horizontalAlign, verticalAlign_e verticalAlign)
+			{
+				static char horizontalAlighStr[] = "lcr";
+				static char verticalAlighStr[] = "tcb";
+				MOHPC_LOG(Debug, "huddraw_align : %u %c %c", index, horizontalAlighStr[(size_t)horizontalAlign], verticalAlighStr[(size_t)verticalAlign]);
+			});
+
+			cgame->getGameplayNotify().getHUDNotify().setAlphaHandler.add([](uint8_t index, float alpha)
+			{
+				MOHPC_LOG(Debug, "huddraw_alpha : %u %.2f", index, alpha);
+			});
+			
+			cgame->getGameplayNotify().getHUDNotify().setColorHandler.add([](uint8_t index, const vec3r_t color)
+			{
+				MOHPC_LOG(Debug, "huddraw_color : %u %.2f %.2f %.2f", index, color[0], color[1], color[2]);
+			});
+
+			cgame->getGameplayNotify().getHUDNotify().setFontHandler.add([](uint8_t index, const char* fontName)
+			{
+				MOHPC_LOG(Debug, "huddraw_font : %u %s", index, fontName);
+			});
+
+			cgame->getGameplayNotify().getHUDNotify().setRectHandler.add([](uint8_t index, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+			{
+				MOHPC_LOG(Debug, "huddraw_rect : %u %hu %hu %hu %hu", index, x, y, width, height);
+			});
+
 			cgame->getGameplayNotify().getHUDNotify().setShaderHandler.add([](uint8_t index, const char* shaderName)
-				{
-					MOHPC_LOG(Debug, "huddraw_shader : %d \"%s\"", index, shaderName);
-				});
+			{
+				MOHPC_LOG(Debug, "huddraw_shader : %u \"%s\"", index, shaderName);
+			});
+
+			cgame->getGameplayNotify().getHUDNotify().setStringHandler.add([](uint8_t index, const char* string)
+			{
+				MOHPC_LOG(Debug, "huddraw_string : %u %s", index, string);
+			});
+
+			cgame->getGameplayNotify().getHUDNotify().setVirtualScreenHandler.add([](uint8_t index, bool virtualScreen)
+			{
+				MOHPC_LOG(Debug, "huddraw_virtualsize : %u %u", index, (virtualScreen ? 1 : 0));
+			});
 
 			printHandler->getHandlerList().printHandler.add([](hudMessage_e hudMessage, const char* text)
 				{
@@ -380,7 +436,7 @@ int main(int argc, const char* argv[])
 
 			printHandler->getHandlerList().hudPrintHandler.add([](const char* text)
 				{
-					MOHPC_LOG(Trace, "server print (%d): \"%s\"", text);
+					MOHPC_LOG(Trace, "server hud print: \"%s\"", text);
 				});
 
 			/*
@@ -420,8 +476,11 @@ int main(int argc, const char* argv[])
 			connection->getHandlerList().preWritePacketHandler.add([&buttons](const ClientTime& time, uint32_t sequenceNum)
 				{
 					buttons.shouldJump = false;
-					buttons.attackPrimary = false;
-					buttons.attackSecondary = false;
+					if (!buttons.dontreset)
+					{
+						buttons.attackPrimary = false;
+						buttons.attackSecondary = false;
+					}
 					buttons.use = false;
 					buttons.weaponCommand = 0;
 				});
@@ -506,6 +565,22 @@ int main(int argc, const char* argv[])
 			}
 			else if (!strcmp(cmd, "attacksecondary")) {
 				buttons.attackSecondary = true;
+			}
+			else if (!strcmp(cmd, "+attackprimary")) {
+				buttons.attackPrimary = true;
+				buttons.dontreset = true;
+			}
+			else if (!strcmp(cmd, "+attacksecondary")) {
+				buttons.attackSecondary = true;
+				buttons.dontreset = true;
+			}
+			else if (!strcmp(cmd, "-attackprimary")) {
+				buttons.attackPrimary = false;
+				buttons.dontreset = false;
+			}
+			else if (!strcmp(cmd, "-attacksecondary")) {
+				buttons.attackSecondary = false;
+				buttons.dontreset = false;
 			}
 			else if (!strcmp(cmd, "use")) {
 				buttons.use = true;
@@ -641,6 +716,26 @@ int main(int argc, const char* argv[])
 				{
 					const float dup = parser.GetFloat(false);
 					udpLossSim->setDuplicateAlpha(dup / 100);
+				}
+				else if (!strcmp(key, "dm_playermodel"))
+				{
+					const char* model = parser.GetToken(false);
+					if (connection)
+					{
+						const UserInfoPtr& userInfo = connection->getUserInfo();
+						UserInfoHelpers::setPlayerAlliedModel(*userInfo, model);
+						connection->updateUserInfo();
+					}
+				}
+				else if (!strcmp(key, "dm_playergermanmodel"))
+				{
+					const char* model = parser.GetToken(false);
+					if (connection)
+					{
+						const UserInfoPtr& userInfo = connection->getUserInfo();
+						UserInfoHelpers::setPlayerGermanModel(*userInfo, model);
+						connection->updateUserInfo();
+					}
 				}
 			}
 			else if (!strcmp(cmd, "disconnect") || !strcmp(cmd, "quit") || !strcmp(cmd, "exit"))

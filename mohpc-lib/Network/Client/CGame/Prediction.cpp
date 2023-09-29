@@ -184,7 +184,7 @@ void Prediction::interpolatePlayerState(tickTime_t simulatedRemoteTime, const Pr
 	if (!next || next->getServerTime() <= prev->getServerTime())
 	{
 		if (!next) {
-			MOHPC_LOG(Debug, "Prediction::interpolatePlayerState: nextSnap == NULL");
+			//MOHPC_LOG(Debug, "Prediction::interpolatePlayerState: nextSnap == NULL");
 		}
 		return;
 	}
